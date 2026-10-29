@@ -76,6 +76,8 @@ export class RiverScene {
     this.timer = new THREE.Timer();
     this.active = false;
     this.mode = 'orbit';
+    this.maxDpr = 2;
+    this.framing = null;
     this.flowScale = 1;
     this.world = null;
 
@@ -85,13 +87,16 @@ export class RiverScene {
 
   resize() {
     const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
-    const dpr = Math.min(window.devicePixelRatio, w * h > 1.2e6 ? 1.5 : 2);
+    const dpr = Math.min(window.devicePixelRatio, this.maxDpr, w * h > 1.2e6 ? 1.5 : 2);
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
     this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    // framing [x, y]: the view slid right / down by that fraction of the screen (the boat off-centre,
+    // room for the title screen's text)
+    if (this.framing) this.camera.setViewOffset(w, h, -this.framing[0] * w, -this.framing[1] * h, w, h);
+    else this.camera.clearViewOffset();
     this.reflection.setSize(w * dpr, h * dpr);
   }
 
@@ -102,7 +107,7 @@ export class RiverScene {
     this.pilot.stop();
     this.key = key;
     this.pirogue.setKind(kind ?? p.pirogue);
-    this.preset = p;
+    this.preset = opts.cloud != null ? { ...p, cloud: opts.cloud } : p;
     // tear down the previous world
     if (this.world) {
       this.scene.remove(this.world.group, this.hyacinths.mesh, this.boats.group, this.moored.group);
@@ -242,6 +247,18 @@ export class RiverScene {
     this.applyMode();
   }
 
+  // the title screen's shot: low over the water, looking past the boat into the low sun, the
+  // camera swinging slowly (swing: degrees each way, 0 to hold still)
+  hero(view = {}) {
+    this.heroView = { dist: 16, height: 2.4, angle: 12, swing: 7, ...view };
+    this.setMode('hero');
+  }
+
+  setFraming(f) {
+    this.framing = f;
+    this.resize();
+  }
+
   applyMode() {
     this.chaseH = null;
     this.controls.enabled = this.mode === 'orbit';
@@ -341,6 +358,11 @@ export class RiverScene {
       const h = this.chaseH;
       this.camera.position.set(g.position.x - Math.cos(h) * (L + 14), 4.5 + L * 0.3, g.position.z - Math.sin(h) * (L + 14));
       this.camera.lookAt(g.position.x + Math.cos(h) * 12, 1.2, g.position.z + Math.sin(h) * 12);
+    } else if (this.mode === 'hero') {
+      const v = this.heroView, a = THREE.MathUtils.degToRad(this.sunAzim + 180 + v.angle + v.swing * Math.sin(t * 0.045));
+      const bob = v.swing ? 0.25 * Math.sin(t * 0.11) : 0;
+      this.camera.position.set(g.position.x + Math.cos(a) * v.dist, v.height + bob, g.position.z + Math.sin(a) * v.dist);
+      this.camera.lookAt(g.position.x, 1.2, g.position.z);
     } else if (this.mode !== 'free') {      // 'free': the camera is left alone (scripted views)
       // keep orbiting the boat as it sways
       const d = new THREE.Vector3(g.position.x, 1 + g.position.y, g.position.z).sub(this.controls.target);

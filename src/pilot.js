@@ -187,13 +187,7 @@ export class PilotUI {
     $('#pFrom').onchange = $('#pTo').onchange = () => this.validate();
     // free piloting, a race against three crews, or a guided visit on autopilot
     this.modeSel = 'libre';
-    document.querySelectorAll('.pmode button').forEach((b) => {
-      b.onclick = () => {
-        this.modeSel = b.dataset.mode;
-        document.querySelectorAll('.pmode button').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
-        this.validate();
-      };
-    });
+    document.querySelectorAll('.pmode button').forEach((b) => (b.onclick = () => this.setMode(b.dataset.mode)));
     $('#pGo').onclick = () => this.start(+$('#pFrom').value, +$('#pTo').value);
     $('#pFree').onclick = () => this.start(+$('#pFrom').value, null);
     $('#hQuit').onclick = () => this.exit();
@@ -224,7 +218,13 @@ export class PilotUI {
     addEventListener('blur', () => this.held.clear());
   }
 
-  // the setup box in the route panel
+  setMode(mode) {
+    this.modeSel = mode;
+    document.querySelectorAll('.pmode button').forEach((x) => { x.classList.toggle('on', x.dataset.mode === mode); x.setAttribute('aria-checked', x.dataset.mode === mode); });
+    if (this.getRoute()) this.validate();
+  }
+
+  // the setup box in the expedition panel
   fill(route) {
     const opts = route.stops.map((s, i) => `<option value="${i}">${s.name}</option>`).join('');
     $('#pFrom').innerHTML = opts;
@@ -249,7 +249,7 @@ export class PilotUI {
     const squeeze = m.scale > 1.3 ? ` La vue 3D condense le trajet (×${m.scale.toFixed(1).replace('.', ',')}) ; distance et temps affichés restent réels.` : '';
     const mode = this.modeSel;
     $('#pGo').disabled = !m.ok;
-    $('#pGo').textContent = { libre: 'Prendre la barre', course: 'Lancer la course', visite: 'Commencer la visite' }[mode];
+    $('#pGo').textContent = { libre: 'Embarquer', course: 'Lancer la course', visite: 'Commencer la visite' }[mode];
     $('#pFree').hidden = mode !== 'libre';
     const extra = !m.ok ? '' : mode === 'course'
       ? ' Course contre trois équipages : passe entre les bouées (+15 s par bouée manquée).'
@@ -742,13 +742,7 @@ export class PilotUI {
     this.river.setMode('orbit');
     $('#pilotHud').hidden = true;
     this.viewer.classList.remove('piloting');
-    this.onExit?.();
-    if (showMap) {
-      this.viewer.classList.replace('full', 'pip');
-      $('#vExpand').textContent = '⤢';
-      // leave room for the side panel and the 3D thumbnail
-      const narrow = matchMedia('(max-width: 820px)').matches;
-      if (this.trail.length > 1) this.tour.fitCoords(this.trail, narrow ? { top: 40, bottom: 260, left: 30, right: 30 } : { top: 60, bottom: 60, left: 60, right: 520 });
-    }
+    // back to the map screen; showMap: frame the trace just sailed
+    this.onExit?.(showMap, this.trail);
   }
 }

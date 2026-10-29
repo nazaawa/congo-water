@@ -1,10 +1,10 @@
-import { Map as MLMap, Marker, NavigationControl, ScaleControl, LngLatBounds, setWorkerUrl } from 'maplibre-gl';
+import { Map as MLMap, Marker, NavigationControl, ScaleControl, AttributionControl, LngLatBounds, setWorkerUrl } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 
 setWorkerUrl(workerUrl);
 
-// Map of the real courses: OpenFreeMap vector basemap (or Esri imagery), the Congo and
+// Map of the real courses: Esri imagery (or the OpenFreeMap vector basemap), the Congo and
 // Kinshasa rivers from OSM, tour routes snapped to the river network (npm run geo),
 // and a pirogue marker that travels along the selected route.
 
@@ -67,11 +67,13 @@ export class TourMap {
   constructor(el, routes) {
     this.routes = routes;
     this.map = new MLMap({
-      container: el, style: STYLE, center: [15.32, -4.3], zoom: 10.6,
-      attributionControl: { compact: true }, maxPitch: 70,
+      container: el, style: STYLE, center: [15.33, -4.36], zoom: 10.1,
+      attributionControl: false, maxPitch: 70,
     });
-    this.map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
-    this.map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-right');
+    // the right side and the bottom belong to the expedition panel and strip
+    this.map.addControl(new NavigationControl({ visualizePitch: true }), 'top-left');
+    this.map.addControl(new AttributionControl({ compact: true }), 'bottom-left');
+    this.map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
     this.ready = new Promise((res) => this.map.on('load', () => this.setup().then(res)));
     this.handlers = {};
   }
@@ -98,7 +100,10 @@ export class TourMap {
     }
     const firstSymbol = map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
     map.addSource('sat', { type: 'raster', tiles: [SAT], tileSize: 256, maxzoom: 19, attribution: 'Imagerie © Esri, Maxar, Earthstar Geographics' });
-    map.addLayer({ id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' }, paint: { 'raster-saturation': -0.1 } }, firstSymbol);
+    map.addLayer({
+      id: 'sat', type: 'raster', source: 'sat',
+      paint: { 'raster-saturation': -0.12, 'raster-contrast': 0.06, 'raster-brightness-max': 0.86 },
+    }, firstSymbol);
 
     map.addSource('congo', { type: 'geojson', data: congo });
     map.addSource('rivers', { type: 'geojson', data: rivers });
@@ -116,8 +121,12 @@ export class TourMap {
       paint: { 'line-color': '#3fa7d6', 'line-opacity': 0.85, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.2, 14, 4] },
     }, firstSymbol);
     map.addLayer({
+      id: 'routes-glow', type: 'line', source: 'routes', layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 6, 12, 14], 'line-blur': 8, 'line-opacity': 0.25 },
+    });
+    map.addLayer({
       id: 'routes-all', type: 'line', source: 'routes', layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 12, 3], 'line-opacity': 0.55, 'line-dasharray': [2, 2] },
+      paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 12, 3], 'line-opacity': 0.75, 'line-dasharray': [2, 2] },
     });
     map.addLayer({
       id: 'route-casing', type: 'line', source: 'routes', filter: ['==', ['get', 'id'], ''],
@@ -162,14 +171,38 @@ export class TourMap {
       map.on('mouseleave', id, () => (map.getCanvas().style.cursor = ''));
     }
 
+    this.setSatellite(true);
+
     const el = document.createElement('div');
     el.className = 'boat-marker';
     el.innerHTML = PIROGUE_SVG;
     this.boat = new Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat([15.32, -4.3]);
   }
 
+  // imagery: the roads' names and the points of interest go, names stay light on dark
   setSatellite(on) {
-    this.map.setLayoutProperty('sat', 'visibility', on ? 'visible' : 'none');
+    const map = this.map;
+    map.setLayoutProperty('sat', 'visibility', on ? 'visible' : 'none');
+    for (const l of map.getStyle().layers) {
+      if (l.type === 'symbol' && /poi|highway|road|shield|oneway|aeroway|airport|housenumber/.test(l.id)) map.setLayoutProperty(l.id, 'visibility', on ? 'none' : 'visible');
+    }
+    map.setPaintProperty('stops-label', 'text-color', on ? '#fff6e0' : '#1a140e');
+    map.setPaintProperty('stops-label', 'text-halo-color', on ? 'rgba(12, 8, 5, .9)' : '#fff8ec');
+    map.setPaintProperty('rivers-label', 'text-color', on ? '#bfe6f7' : '#1d6f99');
+    map.setPaintProperty('rivers-label', 'text-halo-color', on ? 'rgba(12, 8, 5, .8)' : '#ffffff');
+  }
+
+  // the selected route is drawn on its own; the one under the pointer (on its card) stands out
+  highlight(id) {
+    this.hl = id;
+    if (this.tracks) this.paintRoutes();
+  }
+
+  paintRoutes() {
+    const sel = this.route?.id ?? '', hl = this.hl ?? '', is = (v) => ['==', ['get', 'id'], v];
+    this.map.setPaintProperty('routes-all', 'line-opacity', ['case', is(sel), 0, is(hl), 1, sel ? 0.45 : 0.75]);
+    this.map.setPaintProperty('routes-all', 'line-width', ['interpolate', ['linear'], ['zoom'], 5, ['case', is(hl), 3, 1.5], 12, ['case', is(hl), 6, 3]]);
+    this.map.setPaintProperty('routes-glow', 'line-opacity', ['case', is(sel), 0.5, is(hl), 0.6, 0.18]);
   }
 
   select(route, padding) {
@@ -177,7 +210,7 @@ export class TourMap {
     this.route = route;
     this.track = track;
     for (const id of ['route-casing', 'route-active']) map.setFilter(id, ['==', ['get', 'id'], route.id]);
-    map.setPaintProperty('routes-all', 'line-opacity', ['case', ['==', ['get', 'id'], route.id], 0, 0.45]);
+    this.paintRoutes();
     this.stopAlong = route.stops.map((s) => track.project(s.coord));
     this.setStops(-1);
     this.setProgress(0);

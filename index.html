@@ -4,100 +4,142 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Ebale · Eaux du Congo</title>
-  <meta name="description" content="Parcours en pirogue sur le fleuve Congo et les rivières de Kinshasa : tracés réels sur la carte et rendu 3D de l'eau." />
+  <meta name="description" content="Pagaie sur le vrai fleuve Congo et les rivières de Kinshasa : tracés réels OpenStreetMap, eau en 3D temps réel, courses et chant des pagayeurs." />
+  <meta name="theme-color" content="#0d0906" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M3 20c4-3 8 3 13 0s9-3 13 0v6H3z%22 fill=%22%237a5530%22/%3E%3Cpath d=%22M3 14c4-3 8 3 13 0s9-3 13 0%22 stroke=%22%233fa7d6%22 stroke-width=%223%22 fill=%22none%22/%3E%3C/svg%3E" />
+  <link rel="preload" as="image" href="./img/accueil.jpg" media="(min-aspect-ratio: 9/10)" />
+  <link rel="preload" as="image" href="./img/accueil-portrait.jpg" media="(max-aspect-ratio: 9/10)" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,500..800;1,9..144,400..600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
-  <div id="app">
-    <aside id="panel">
-      <header class="brand">
-        <div class="flag" aria-hidden="true"><i></i><i></i><i></i></div>
-        <div>
-          <h1>Ebale <span>· Eaux du Congo</span></h1>
-          <p>Parcours en pirogue sur le fleuve et les rivières de Kinshasa — tracés réels OpenStreetMap, eau en 3D.</p>
+  <div id="app" data-screen="title">
+    <main id="map" aria-label="Carte du fleuve"></main>
+    <div class="map-shade" aria-hidden="true"></div>
+
+    <!-- the map screen: the real courses, pick an expedition -->
+    <div id="mapUi" hidden>
+      <header class="bar">
+        <button type="button" class="bar-home" id="toTitle" aria-label="Retour au menu">
+          <span class="chev" aria-hidden="true">‹</span>
+          <span class="mark" aria-hidden="true"></span>
+          <b>Ebale</b>
+        </button>
+        <div class="bar-title"><small>Carte du fleuve</small><b id="barTitle">Choisis ton expédition</b></div>
+        <div class="bar-tools">
+          <div class="seg layer-toggle" role="group" aria-label="Fond de carte">
+            <button type="button" data-base="sat" class="on">Satellite</button>
+            <button type="button" data-base="plan">Plan</button>
+          </div>
+          <button type="button" class="icon-btn" data-sound aria-pressed="true" aria-label="Couper le son"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" /><path class="wave" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" /></svg></button>
+          <button type="button" class="icon-btn" data-open="help" aria-label="Comment jouer">?</button>
         </div>
       </header>
 
-      <nav id="routes" aria-label="Parcours"></nav>
-
-      <section id="detail" hidden>
-        <button class="back" id="back" type="button">← Tous les parcours</button>
-        <h2 id="dName"></h2>
-        <p class="tagline" id="dTag"></p>
-        <dl class="stats">
-          <div><dt>Distance</dt><dd id="dKm"></dd></div>
-          <div><dt>Durée</dt><dd id="dDur"></dd></div>
-          <div><dt>Embarcation</dt><dd id="dBoat"></dd></div>
-        </dl>
-        <p class="text" id="dText"></p>
-
-        <div class="player">
-          <button id="play" type="button" class="primary" aria-label="Lancer le parcours">▶ Naviguer</button>
-          <div class="speed" role="group" aria-label="Vitesse">
-            <button type="button" data-speed="0.5">×½</button>
-            <button type="button" data-speed="1" class="on">×1</button>
-            <button type="button" data-speed="3">×3</button>
-          </div>
-          <label class="follow"><input type="checkbox" id="follow" checked /> Suivre</label>
-        </div>
-
-        <div class="pilot-setup">
-          <h3>Piloter la pirogue</h3>
-          <div class="pmode" role="radiogroup" aria-label="Mode de jeu">
-            <button type="button" role="radio" data-mode="libre" class="on" aria-checked="true">Libre</button>
-            <button type="button" role="radio" data-mode="course" aria-checked="false">Course</button>
-            <button type="button" role="radio" data-mode="visite" aria-checked="false">Visite guidée</button>
-          </div>
-          <div class="pconds">
-            <label>Météo <select id="pWeather"><option value="variable">Variable</option><option value="beau">Beau temps</option><option value="orage">Orage</option></select></label>
-            <label>Saison <select id="pSeason"><option value="">Normale</option><option value="pluies">Pluies · hautes eaux</option><option value="seche">Sèche · bancs de sable</option></select></label>
-            <label>Moment <select id="pTime"><option value="">Comme la carte</option><option value="8">Matin</option><option value="13">Midi</option><option value="17.6">Coucher</option><option value="19.4">Nuit</option></select></label>
-          </div>
-          <div class="pick">
-            <label>Départ <select id="pFrom"></select></label>
-            <span aria-hidden="true">→</span>
-            <label>Arrivée <select id="pTo"></select></label>
-          </div>
-          <p class="pnote" id="pNote"></p>
-          <div class="pbtns">
-            <button type="button" id="pGo" class="primary">Prendre la barre</button>
-            <button type="button" id="pFree" class="ghost">Pilotage libre</button>
-          </div>
-        </div>
-        <div class="progress">
-          <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Position sur le parcours" />
-          <div class="readout"><span id="rKm">0 km</span><span id="rTime">0 min</span><span id="rNext"></span></div>
-        </div>
-
-        <ol id="stops" class="stops"></ol>
+      <section class="quests" id="quests" aria-label="Expéditions">
+        <div class="quests-head"><b>Expéditions</b><span>Tracés réels du fleuve et des rivières</span></div>
+        <div class="quests-row" id="routes"></div>
       </section>
 
-      <footer class="credits">
-        Carte © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>,
-        <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · Imagerie Esri ·
-        Rendu de l'eau inspiré d'<a href="https://github.com/Humpalumps/Ultra-Water" target="_blank" rel="noopener">Ultra-Water</a> ·
-        Personnages d'après <a href="https://github.com/mrdoob/slop-newyork" target="_blank" rel="noopener">slop-newyork</a> ·
-        Animaux : Hippopotamus, Crocodile, Great egret, Heron, Yellow billed stork par Poly by Google
-        (<a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC-BY 3.0</a>, via <a href="https://poly.pizza" target="_blank" rel="noopener">Poly Pizza</a>), Fish par Quaternius (CC0)
-      </footer>
-    </aside>
+      <aside class="quest framed" id="detail" hidden aria-labelledby="dName">
+        <button type="button" class="quest-close" id="back" aria-label="Fermer l'expédition">✕</button>
+        <header class="quest-head">
+          <p class="eyebrow" id="dNum"></p>
+          <h2 id="dName"></h2>
+          <p class="tagline" id="dTag"></p>
+          <dl class="qstats">
+            <div><dt>Distance</dt><dd id="dKm"></dd></div>
+            <div><dt>Durée</dt><dd id="dDur"></dd></div>
+            <div><dt>Courant</dt><dd id="dFlow"></dd></div>
+          </dl>
+          <p class="boat-line"><span>Embarcation</span><b id="dBoat"></b></p>
+        </header>
 
-    <main id="map" aria-label="Carte"></main>
+        <div class="tabs" role="tablist" aria-label="Expédition">
+          <button type="button" role="tab" id="tabPlay" aria-controls="panelPlay" aria-selected="true" data-tab="play">Jouer</button>
+          <button type="button" role="tab" id="tabRoute" aria-controls="panelRoute" aria-selected="false" data-tab="route">Le parcours</button>
+        </div>
 
-    <div class="layer-toggle" role="group" aria-label="Fond de carte">
-      <button type="button" data-base="plan" class="on">Plan</button>
-      <button type="button" data-base="sat">Satellite</button>
+        <div class="tab-body" id="panelPlay" role="tabpanel" aria-labelledby="tabPlay">
+          <p class="label">Mode de jeu</p>
+          <div class="pmode" role="radiogroup" aria-label="Mode de jeu">
+            <button type="button" role="radio" data-mode="libre" class="on" aria-checked="true"><b>Libre</b><small>À ton rythme</small></button>
+            <button type="button" role="radio" data-mode="course" aria-checked="false"><b>Course</b><small>3 équipages rivaux</small></button>
+            <button type="button" role="radio" data-mode="visite" aria-checked="false"><b>Visite</b><small>Le pilote te guide</small></button>
+          </div>
+
+          <p class="label">Trajet</p>
+          <div class="pick">
+            <label><span>Départ</span><select id="pFrom"></select></label>
+            <span class="pick-arrow" aria-hidden="true">→</span>
+            <label><span>Arrivée</span><select id="pTo"></select></label>
+          </div>
+          <p class="pnote" id="pNote"></p>
+
+          <p class="label">Conditions</p>
+          <div class="conds">
+            <div class="cond" data-for="pWeather"><span>Météo</span>
+              <div class="chips" role="radiogroup" aria-label="Météo">
+                <button type="button" role="radio" data-v="variable" class="on" aria-checked="true">Variable</button>
+                <button type="button" role="radio" data-v="beau" aria-checked="false">Beau temps</button>
+                <button type="button" role="radio" data-v="orage" aria-checked="false">Orage</button>
+              </div>
+            </div>
+            <div class="cond" data-for="pSeason"><span>Saison</span>
+              <div class="chips" role="radiogroup" aria-label="Saison">
+                <button type="button" role="radio" data-v="" class="on" aria-checked="true">Normale</button>
+                <button type="button" role="radio" data-v="pluies" aria-checked="false" title="Hautes eaux, courant plus fort">Pluies</button>
+                <button type="button" role="radio" data-v="seche" aria-checked="false" title="Basses eaux, bancs de sable">Sèche</button>
+              </div>
+            </div>
+            <div class="cond" data-for="pTime"><span>Moment</span>
+              <div class="chips" role="radiogroup" aria-label="Moment de la journée">
+                <button type="button" role="radio" data-v="" class="on" aria-checked="true">Auto</button>
+                <button type="button" role="radio" data-v="8" aria-checked="false">Matin</button>
+                <button type="button" role="radio" data-v="13" aria-checked="false">Midi</button>
+                <button type="button" role="radio" data-v="17.6" aria-checked="false">Soir</button>
+                <button type="button" role="radio" data-v="19.4" aria-checked="false">Nuit</button>
+              </div>
+            </div>
+            <input type="hidden" id="pWeather" value="variable" />
+            <input type="hidden" id="pSeason" value="" />
+            <input type="hidden" id="pTime" value="" />
+          </div>
+
+        </div>
+
+        <div class="tab-body" id="panelRoute" role="tabpanel" aria-labelledby="tabRoute" hidden>
+          <p class="story" id="dText"></p>
+          <div class="player">
+            <button id="play" type="button" class="btn-ghost" aria-label="Survoler le parcours sur la carte">▶ Survoler</button>
+            <div class="seg speed" role="group" aria-label="Vitesse">
+              <button type="button" data-speed="0.5">×½</button>
+              <button type="button" data-speed="1" class="on">×1</button>
+              <button type="button" data-speed="3">×3</button>
+            </div>
+            <label class="follow"><input type="checkbox" id="follow" checked /> Suivre</label>
+          </div>
+          <div class="progress">
+            <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Position sur le parcours" />
+            <div class="readout"><span id="rKm">0 km</span><span id="rTime">0 min</span><span id="rNext"></span></div>
+          </div>
+          <ol id="stops" class="stops"></ol>
+        </div>
+
+        <div class="cta quest-go">
+          <button type="button" id="pGo" class="btn-play">Embarquer</button>
+          <button type="button" id="pFree" class="btn-ghost">Pilotage libre</button>
+        </div>
+      </aside>
     </div>
 
     <section id="viewer" class="pip" aria-label="Vue 3D de l'eau">
       <div class="vbar">
         <div class="vtitle"><b id="vPlace">Fleuve Congo</b><span id="vScene"></span></div>
         <div class="vbtns">
-          <button type="button" id="vSound" title="Son" aria-label="Couper le son" aria-pressed="true">♪</button>
+          <button type="button" id="vSound" data-sound title="Son" aria-label="Couper le son" aria-pressed="true">♪</button>
           <button type="button" id="vMode" title="Changer de point de vue">À bord</button>
           <button type="button" id="vExpand" title="Plein écran" aria-label="Plein écran">⤢</button>
           <button type="button" id="vClose" title="Fermer" aria-label="Fermer la vue 3D">✕</button>
@@ -136,21 +178,22 @@
         </div>
         <div class="hud-bottom">
           <span class="keys">Z/W ▲ accélérer · S ▼ ralentir · Q/A ◀ ▶ D barrer · Espace stop · C caméra<span id="kAuto" hidden> · P pilote auto</span></span>
-          <div class="speed" role="group" aria-label="Accélération du temps">
+          <div class="seg speed" role="group" aria-label="Accélération du temps">
             <button type="button" data-ts="1" class="on">×1</button>
             <button type="button" data-ts="4">×4</button>
             <button type="button" data-ts="10">×10</button>
             <button type="button" data-ts="30">×30</button>
           </div>
-          <button type="button" id="hQuit" class="ghost">Quitter</button>
+          <button type="button" id="hQuit" class="btn-ghost">Quitter</button>
         </div>
         <div class="arrive" id="arrive" hidden>
+          <p class="eyebrow">Arrivée</p>
           <h3 id="aTitle"></h3>
           <p id="aText"></p>
           <table class="results" id="aTable" hidden></table>
-          <div class="pbtns">
-            <button type="button" id="aAgain" class="primary">Rejouer</button>
-            <button type="button" id="aMap" class="ghost">Voir ma trace sur la carte</button>
+          <div class="cta">
+            <button type="button" id="aAgain" class="btn-play">Rejouer</button>
+            <button type="button" id="aMap" class="btn-ghost">Voir ma trace sur la carte</button>
           </div>
         </div>
       </div>
@@ -162,9 +205,86 @@
         <p class="vnote" id="vNote"></p>
       </div>
     </section>
-    <button id="vOpen" type="button" class="vopen" hidden>◉ Vue 3D de l'eau</button>
+    <button id="vOpen" type="button" class="vopen" hidden>Vue 3D de l'eau</button>
 
     <div id="toast" role="status" aria-live="polite"></div>
+
+    <!-- the title screen, over the live 3D river -->
+    <section id="title" class="title" aria-label="Accueil">
+      <picture>
+        <source media="(max-aspect-ratio: 9/10)" srcset="./img/accueil-portrait.jpg" />
+        <img class="t-poster" src="./img/accueil.jpg" alt="" aria-hidden="true" />
+      </picture>
+      <div class="t-shade" aria-hidden="true"></div>
+      <header class="t-top">
+        <span class="mark" aria-hidden="true"></span>
+        <span class="t-place">République démocratique du Congo</span>
+        <button type="button" class="icon-btn" data-sound aria-pressed="true" aria-label="Couper le son"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" /><path class="wave" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" /></svg></button>
+      </header>
+      <div class="t-main">
+        <p class="eyebrow">Le fleuve Congo · Kinshasa</p>
+        <h1 class="logo">Ebale</h1>
+        <p class="t-sub">Les eaux du Congo</p>
+        <p class="t-gloss"><i>ebale</i> : « le fleuve », en lingala</p>
+        <p class="t-pitch">Prends la pagaie sur le vrai fleuve, tracé d’après OpenStreetMap. Chante avec ton équipage, défie les pirogues rivales et écoute le lokolé des villages.</p>
+        <nav class="menu" aria-label="Menu principal">
+          <button type="button" class="m-item m-play" data-go="libre"><span>Jouer</span><small>8 expéditions, de Kinshasa à Kisangani</small></button>
+          <button type="button" class="m-item" data-go="course"><span>Course</span><small>Contre trois équipages, entre les bouées</small></button>
+          <button type="button" class="m-item" data-go="visite"><span>Visite guidée</span><small>Le pilote te promène d’étape en étape</small></button>
+          <button type="button" class="m-item" data-open="help"><span>Comment jouer</span><small>Commandes, chant, courant</small></button>
+        </nav>
+      </div>
+      <footer class="t-foot">
+        <p class="live"><i aria-hidden="true"></i><span>Temps réel</span><b id="tLive">Fleuve en forêt équatoriale</b></p>
+        <p class="t-keys" aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> choisir · <kbd>Entrée</kbd> valider</p>
+        <button type="button" class="link" data-open="credits">Crédits</button>
+      </footer>
+    </section>
+
+    <dialog id="help" class="modal" aria-labelledby="helpTitle">
+      <form method="dialog"><button class="modal-x" aria-label="Fermer">✕</button></form>
+      <p class="eyebrow">Avant d’embarquer</p>
+      <h2 id="helpTitle">Comment jouer</h2>
+      <div class="help-grid">
+        <section>
+          <h3>Piloter</h3>
+          <table class="keys-table">
+            <tr><td><kbd>Z</kbd> <kbd>W</kbd> <kbd>↑</kbd></td><td>Gaz (la manette reste en place)</td></tr>
+            <tr><td><kbd>S</kbd> <kbd>↓</kbd></td><td>Ralentir, puis marche arrière</td></tr>
+            <tr><td><kbd>Q</kbd> <kbd>A</kbd> <kbd>←</kbd> · <kbd>D</kbd> <kbd>→</kbd></td><td>Barrer</td></tr>
+            <tr><td><kbd>Espace</kbd></td><td>Couper les gaz, ou coup de pagaie</td></tr>
+            <tr><td><kbd>C</kbd></td><td>Caméra : poursuite, à bord, orbite</td></tr>
+            <tr><td><kbd>P</kbd></td><td>Rendre la barre au pilote (visite)</td></tr>
+          </table>
+          <p>Sur écran tactile, les flèches et le gros bouton <b>Pagaie</b> apparaissent à l’écran.</p>
+        </section>
+        <section>
+          <h3>Le chant des pagayeurs</h3>
+          <p>Le soliste lance « É-é ya ! Tokende ! », le chœur répond « O-hé ! Makasi ! ». Donne le coup de pagaie sur le coup de tambour : <b>« Malamu ! »</b>. En rythme, la combo monte et la pirogue va jusqu’à un tiers plus vite.</p>
+        </section>
+        <section>
+          <h3>Le courant</h3>
+          <p>Fort au milieu, faible près des berges. Pour traverser, vise en amont ; à contre-courant, longe les berges. Berges et rochers arrêtent la pirogue : recule pour repartir.</p>
+        </section>
+        <section>
+          <h3>Course, visite, lokolé</h3>
+          <p><b>Course</b> : passe entre les bouées, +15 s par bouée manquée. <b>Visite</b> : le pilote suit le lit et s’arrête aux étapes ; une touche te rend la barre. Le <b>lokolé</b>, tambour des villages, salue ton passage et annonce l’orage.</p>
+        </section>
+      </div>
+    </dialog>
+
+    <dialog id="credits" class="modal" aria-labelledby="creditsTitle">
+      <form method="dialog"><button class="modal-x" aria-label="Fermer">✕</button></form>
+      <p class="eyebrow">Ebale · Eaux du Congo</p>
+      <h2 id="creditsTitle">Crédits</h2>
+      <ul class="credits-list">
+        <li>Carte © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">contributeurs OpenStreetMap</a> (ODbL), tuiles <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> / OpenMapTiles, imagerie © Esri, Maxar, Earthstar Geographics.</li>
+        <li>Rendu de l’eau inspiré d’<a href="https://github.com/Humpalumps/Ultra-Water" target="_blank" rel="noopener">Ultra-Water</a> (MIT).</li>
+        <li>Personnages d’après <a href="https://github.com/mrdoob/slop-newyork" target="_blank" rel="noopener">slop-newyork</a> de mrdoob (MIT).</li>
+        <li>Animaux : « Hippopotamus », « Crocodile », « Great egret », « Heron » et « Yellow billed stork » par Poly by Google (<a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC-BY 3.0</a>, via <a href="https://poly.pizza" target="_blank" rel="noopener">Poly Pizza</a>) ; « Fish » par Quaternius (CC0).</li>
+        <li>Sons entièrement synthétisés (Web Audio), sans aucun fichier.</li>
+      </ul>
+    </dialog>
   </div>
   <script type="module" src="/src/main.js"></script>
 </body>

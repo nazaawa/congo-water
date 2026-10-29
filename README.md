@@ -1,6 +1,11 @@
 # Ebale · Eaux du Congo
 
-Carte interactive des parcours en pirogue sur le fleuve Congo et les rivières de Kinshasa. Les tracés suivent le vrai cours d'eau (OpenStreetMap). Pour chaque étape, une vue 3D temps réel montre l'eau du fleuve, avec une pirogue et ses pagayeurs.
+Jeu de pirogue sur le fleuve Congo et les rivières de Kinshasa. Les tracés suivent le vrai cours d'eau (OpenStreetMap), et l'eau, les pirogues et leurs pagayeurs sont rendus en 3D temps réel.
+
+Le jeu a trois écrans :
+- **L'écran titre**, devant le fleuve en 3D temps réel : une pirogue de pêche au coucher du soleil, la caméra qui se balance doucement. Le menu propose **Jouer**, **Course**, **Visite guidée** et **Comment jouer** (souris, ou ↑ ↓ et Entrée). Une affiche pré-rendue du même plan (`public/img/accueil.jpg`, et `accueil-portrait.jpg` sur téléphone) s'affiche le temps que la 3D se charge.
+- **La carte du fleuve**, en plein écran, sur l'imagerie satellite. Les huit expéditions sont des cartes en bas de l'écran, avec la forme du tracé et la force du courant. Choisir une carte ouvre sa fiche : l'onglet **Jouer** pour le mode, le trajet et les conditions, l'onglet **Le parcours** pour survoler le tracé et voir chaque étape en 3D.
+- **Le voyage**, en 3D plein écran avec le HUD de pilotage. **Quitter** ramène à la carte.
 
 ```bash
 npm install
@@ -15,19 +20,19 @@ Pour remplacer un modèle, recompresse-le en gardant la hiérarchie. Les noms de
 npx @gltf-transform/cli optimize source.glb public/models/pirogue-peche.glb --compress meshopt --flatten false --join-named false --palette false
 ```
 
-Paramètres d'URL : `?parcours=pool-malebo` ouvre un parcours, et `&3d` ouvre directement la vue 3D.
+Paramètres d'URL : `?parcours=pool-malebo` saute l'écran titre et ouvre directement cette expédition, et `&3d` ouvre directement la vue 3D.
 
 ## Piloter la pirogue
 
-Dans la fiche d'un parcours, la case **Piloter la pirogue** permet de choisir un mode, une étape de départ et une étape d'arrivée.
+Dans la fiche d'une expédition, l'onglet **Jouer** permet de choisir un mode, une étape de départ et une étape d'arrivée, puis **Embarquer**.
 
-- **Libre** : **Prendre la barre**.
+- **Libre** : **Embarquer**, ou **Pilotage libre** pour partir sans arrivée.
 - **Course** : trois équipages rivaux (Requins de Kingabwa, Pagayeurs de Maluku, Étoile de Kinkole…) dans le même bateau que toi. Il y a un compte à rebours 3-2-1, des portes de bouées (+15 s par bouée manquée), un classement en direct, une arche d'arrivée et un tableau des résultats.
 - **Visite guidée** : en baleinière peinte de loisirs (18 m) dès que la rivière est assez large. Le pilote automatique suit le lit et ralentit aux étapes, où une fiche s'affiche. Une touche suffit pour prendre la barre, et **P** la rend au pilote.
 
 Dans tous les modes, le nom des étapes flotte au-dessus de leur berge, avec la distance réelle qui reste.
 
-Les **conditions** se choisissent dans la même case :
+Les **conditions** se choisissent dans le même onglet :
 - **Météo** : variable (un orage peut éclater en route, annoncé par le lokolé), beau temps, ou orage dès le départ.
 - **Saison** : pluies (hautes eaux, courant plus fort, forêt inondée, plus de jacinthes) ou sèche (basses eaux, bancs de sable qui sortent, courant plus lent).
 - **Moment** : matin, midi, coucher ou nuit (lanternes des pêcheurs et des villages, lampe à la proue).
@@ -46,7 +51,7 @@ Le tambour à fente des villages du fleuve envoie des messages quand tu passes :
 - il annonce un orage, et la fin de l'orage ;
 - il appelle les équipages avant une course.
 
-Le message s'affiche en sous-titre, et le son vient du côté du village. Les villageois qui saluent crient « Mbote ! ». Exemple : Beach Ngobila → Port de Brazzaville. **Pilotage libre** lâche la pirogue à l'étape de départ, sans arrivée.
+Le message s'affiche en sous-titre, et le son vient du côté du village. Les villageois qui saluent crient « Mbote ! ». Exemple : Beach Ngobila → Port de Brazzaville.
 
 | Commande | Clavier | Écran tactile |
 |---|---|---|
@@ -93,8 +98,12 @@ Les étapes et leurs coordonnées sont dans `src/data/routes.js` (vérifiées av
 - Un graphe par rivière, construit à partir des voies OSM. Les extrémités qui ne se touchent pas sont raccordées si l'écart est inférieur à un seuil.
 - Dijkstra entre les points de passage, si bien que la ligne suit le lit du fleuve, avec ses bras et ses îles. Elle est ensuite simplifiée (Douglas-Peucker) et écrite dans `public/data/*.geojson`.
 
+**Écrans** (`src/main.js`, `src/style.css`)
+- L'écran titre réutilise la vue 3D du jeu, derrière le texte : le mode caméra `hero` de `RiverScene` regarde le soleil bas par-delà la pirogue, et `setFraming` décale l'image pour laisser la place au titre (à droite sur ordinateur, au-dessus du menu sur téléphone). En fond d'écran, la 3D est rendue en résolution réduite, et elle s'arrête dès qu'on passe à la carte.
+- Titres en Fraunces, interface en Barlow et Barlow Condensed, panneaux sombres à coins dorés, boutons biseautés.
+
 **Carte** (`src/map.js`)
-- Fond vectoriel OpenFreeMap, libellés en français quand OSM les a, imagerie satellite Esri en option.
+- Imagerie satellite Esri par défaut (les noms de routes et les points d'intérêt sont masqués), fond vectoriel OpenFreeMap au choix, libellés en français quand OSM les a.
 - Une pirogue avance le long du tracé, à la vitesse typique de l'embarcation, en temps accéléré.
 - Quand elle passe une étape, la vue 3D change d'ambiance.
 
