@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Ebale · Eaux du Congo</title>
+  <meta name="description" content="Parcours en pirogue sur le fleuve Congo et les rivières de Kinshasa : tracés réels sur la carte et rendu 3D de l'eau." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M3 20c4-3 8 3 13 0s9-3 13 0v6H3z%22 fill=%22%237a5530%22/%3E%3Cpath d=%22M3 14c4-3 8 3 13 0s9-3 13 0%22 stroke=%22%233fa7d6%22 stroke-width=%223%22 fill=%22none%22/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <aside id="panel">
+      <header class="brand">
+        <div class="flag" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div>
+          <h1>Ebale <span>· Eaux du Congo</span></h1>
+          <p>Parcours en pirogue sur le fleuve et les rivières de Kinshasa — tracés réels OpenStreetMap, eau en 3D.</p>
+        </div>
+      </header>
+
+      <nav id="routes" aria-label="Parcours"></nav>
+
+      <section id="detail" hidden>
+        <button class="back" id="back" type="button">← Tous les parcours</button>
+        <h2 id="dName"></h2>
+        <p class="tagline" id="dTag"></p>
+        <dl class="stats">
+          <div><dt>Distance</dt><dd id="dKm"></dd></div>
+          <div><dt>Durée</dt><dd id="dDur"></dd></div>
+          <div><dt>Embarcation</dt><dd id="dBoat"></dd></div>
+        </dl>
+        <p class="text" id="dText"></p>
+
+        <div class="player">
+          <button id="play" type="button" class="primary" aria-label="Lancer le parcours">▶ Naviguer</button>
+          <div class="speed" role="group" aria-label="Vitesse">
+            <button type="button" data-speed="0.5">×½</button>
+            <button type="button" data-speed="1" class="on">×1</button>
+            <button type="button" data-speed="3">×3</button>
+          </div>
+          <label class="follow"><input type="checkbox" id="follow" checked /> Suivre</label>
+        </div>
+
+        <div class="pilot-setup">
+          <h3>Piloter la pirogue</h3>
+          <div class="pmode" role="radiogroup" aria-label="Mode de jeu">
+            <button type="button" role="radio" data-mode="libre" class="on" aria-checked="true">Libre</button>
+            <button type="button" role="radio" data-mode="course" aria-checked="false">Course</button>
+            <button type="button" role="radio" data-mode="visite" aria-checked="false">Visite guidée</button>
+          </div>
+          <div class="pick">
+            <label>Départ <select id="pFrom"></select></label>
+            <span aria-hidden="true">→</span>
+            <label>Arrivée <select id="pTo"></select></label>
+          </div>
+          <p class="pnote" id="pNote"></p>
+          <div class="pbtns">
+            <button type="button" id="pGo" class="primary">Prendre la barre</button>
+            <button type="button" id="pFree" class="ghost">Pilotage libre</button>
+          </div>
+        </div>
+        <div class="progress">
+          <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Position sur le parcours" />
+          <div class="readout"><span id="rKm">0 km</span><span id="rTime">0 min</span><span id="rNext"></span></div>
+        </div>
+
+        <ol id="stops" class="stops"></ol>
+      </section>
+
+      <footer class="credits">
+        Carte © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>,
+        <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · Imagerie Esri ·
+        Rendu de l'eau inspiré d'<a href="https://github.com/Humpalumps/Ultra-Water" target="_blank" rel="noopener">Ultra-Water</a>
+      </footer>
+    </aside>
+
+    <main id="map" aria-label="Carte"></main>
+
+    <div class="layer-toggle" role="group" aria-label="Fond de carte">
+      <button type="button" data-base="plan" class="on">Plan</button>
+      <button type="button" data-base="sat">Satellite</button>
+    </div>
+
+    <section id="viewer" class="pip" aria-label="Vue 3D de l'eau">
+      <div class="vbar">
+        <div class="vtitle"><b id="vPlace">Fleuve Congo</b><span id="vScene"></span></div>
+        <div class="vbtns">
+          <button type="button" id="vMode" title="Changer de point de vue">À bord</button>
+          <button type="button" id="vExpand" title="Plein écran" aria-label="Plein écran">⤢</button>
+          <button type="button" id="vClose" title="Fermer" aria-label="Fermer la vue 3D">✕</button>
+        </div>
+      </div>
+      <div id="three"></div>
+      <div id="labels" aria-hidden="true"></div>
+      <div id="pilotHud" hidden>
+        <ol class="rank" id="hRank" hidden></ol>
+        <div class="countdown" id="countdown" hidden></div>
+        <aside class="card" id="card" hidden><small id="cKind"></small><b id="cName"></b><p id="cText"></p></aside>
+        <div class="hud-top">
+          <b id="hTitle"></b>
+          <div class="hud-nums">
+            <span><em id="hDist">—</em>restant</span>
+            <span><em id="hSpeed">0</em>km/h</span>
+            <span><em id="hTime">0:00</em>temps</span>
+          </div>
+          <div class="hud-msg" id="hMsg"></div>
+        </div>
+        <div class="compass" aria-hidden="true"><svg id="hArrow" viewBox="-12 -16 24 32" width="22" height="30"><path d="M0-15 9 13 0 7-9 13Z" /></svg></div>
+        <canvas id="radar" width="320" height="320" aria-label="Plan du trajet"></canvas>
+        <div class="throttle" aria-hidden="true"><i id="hThrottle"></i><span>Gaz</span></div>
+        <div class="pad" aria-label="Commandes">
+          <button type="button" data-k="up" aria-label="Accélérer">▲</button>
+          <button type="button" data-k="left" aria-label="Gauche">◀</button>
+          <button type="button" data-k="stop" aria-label="Stop">■</button>
+          <button type="button" data-k="right" aria-label="Droite">▶</button>
+          <button type="button" data-k="down" aria-label="Ralentir">▼</button>
+        </div>
+        <div class="hud-bottom">
+          <span class="keys">Z/W ▲ accélérer · S ▼ ralentir · Q/A ◀ ▶ D barrer · Espace stop · C caméra<span id="kAuto" hidden> · P pilote auto</span></span>
+          <div class="speed" role="group" aria-label="Accélération du temps">
+            <button type="button" data-ts="1" class="on">×1</button>
+            <button type="button" data-ts="4">×4</button>
+            <button type="button" data-ts="10">×10</button>
+            <button type="button" data-ts="30">×30</button>
+          </div>
+          <button type="button" id="hQuit" class="ghost">Quitter</button>
+        </div>
+        <div class="arrive" id="arrive" hidden>
+          <h3 id="aTitle"></h3>
+          <p id="aText"></p>
+          <table class="results" id="aTable" hidden></table>
+          <div class="pbtns">
+            <button type="button" id="aAgain" class="primary">Rejouer</button>
+            <button type="button" id="aMap" class="ghost">Voir ma trace sur la carte</button>
+          </div>
+        </div>
+      </div>
+      <div class="vctl">
+        <label>Ambiance <select id="preset" aria-label="Ambiance"></select></label>
+        <label>Bateau <select id="pirogue" aria-label="Bateau"><option value="">—</option></select></label>
+        <label>Heure <input type="range" id="hour" min="5.6" max="18.6" step="0.05" value="16" /><output id="hourOut">16:00</output></label>
+        <label>Courant <input type="range" id="flow" min="0.2" max="2" step="0.05" value="1" /><output id="flowOut">×1</output></label>
+        <p class="vnote" id="vNote"></p>
+      </div>
+    </section>
+    <button id="vOpen" type="button" class="vopen" hidden>◉ Vue 3D de l'eau</button>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
