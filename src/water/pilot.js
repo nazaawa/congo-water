@@ -87,7 +87,7 @@ export class Pilot {
   constructor(river) {
     this.river = river;
     this.active = false;
-    this.input = { throttle: 0, steer: 0 };     // throttle is a lever (stays put), steer springs back
+    this.input = { throttle: 0, steer: 0, boost: 1 };     // throttle is a lever (stays put), steer springs back
     this.timeScale = 1;
     this.group = new THREE.Group();
     this.flowDir = new THREE.Vector2(1, 0);
@@ -147,6 +147,7 @@ export class Pilot {
     const w = this.river.world, c = this.river.channel.sample(x, z, this._c);
     if (c.s < 15 || c.s > this.river.channel.length - 15 || w.height(x, z) > -0.35) return true;   // ends of the modelled river, or the bank
     for (const r of w.rocks) if (Math.abs(x - r.x) < r.r + 1 && Math.hypot(x - r.x, z - r.z) < r.r * 0.9 + 0.5) return true;
+    for (const h of this.river.fauna?.obstacles ?? []) if (h.r > 0 && Math.hypot(x - h.x, z - h.z) < h.r) return true;   // hippos
     return false;
   }
 
@@ -160,7 +161,8 @@ export class Pilot {
         left -= h;
         // through the water
         const A = spec.vmax * 0.35;
-        const thrust = inp.throttle >= 0 ? inp.throttle : inp.throttle * 0.5;
+        // boost: paddling in time with the chant (pilot UI), up to a third more push
+        const thrust = inp.throttle >= 0 ? inp.throttle * (inp.boost ?? 1) : inp.throttle * 0.5;
         s.u += (thrust * A - (A / (spec.vmax * spec.vmax)) * s.u * Math.abs(s.u)) * h;
         s.v += -s.v * 2.5 * h;
         const bite = THREE.MathUtils.clamp(0.3 + Math.abs(s.u) / spec.vmax, 0.3, 1) * (s.u < -0.1 ? -1 : 1);
@@ -169,7 +171,9 @@ export class Pilot {
         // over the ground: add the current
         const fx = Math.cos(s.heading), fz = Math.sin(s.heading);
         const cur = this.current(s.x, s.z);
-        const vx = fx * s.u - fz * s.v + cur * this.flowDir.x, vz = fz * s.u + fx * s.v + cur * this.flowDir.y;
+        // the wind leans on the boat too (a few percent of its speed, more for big hulls)
+        const wind = this.river.weather?.wind, wk = 0.035 * Math.min(1.5, this.river.pirogue.L / 10);
+        const vx = fx * s.u - fz * s.v + cur * this.flowDir.x + (wind ? wind.x * wk : 0), vz = fz * s.u + fx * s.v + cur * this.flowDir.y + (wind ? wind.y * wk : 0);
         const nx = s.x + vx * h, nz = s.z + vz * h;
         const bowX = nx + fx * this.river.pirogue.L * 0.45, bowZ = nz + fz * this.river.pirogue.L * 0.45;
         const bowHit = this.blocked(bowX, bowZ);

@@ -51,6 +51,8 @@ async function showPlace(stop, sceneKey, mission = null) {
   $('#vOpen').hidden = true;
   const r = await ensureRiver();
   await r.ready;
+  r.audio.resume();
+  r.audio.setMaster(soundOn ? 0.8 : 0);
   const kind = mission?.kind ?? ($('#pirogue').value || state.route?.pirogue || PRESETS[sceneKey].pirogue);
   $('#vPlace').textContent = stop?.name ?? PRESETS[sceneKey].label;
   $('#vScene').textContent = `${PRESETS[sceneKey].label} · ${PIROGUES[kind].label}`;
@@ -82,12 +84,22 @@ function closeViewer() {
   $('#vExpand').textContent = '⤢';
   $('#vOpen').hidden = !state.route;
   river?.stop();
+  river?.audio.setMaster(0);
 }
 
 $('#vClose').onclick = () => { pilotUI.exit(); closeViewer(); };
 $('#vOpen').onclick = () => {
   const st = state.route?.stops[Math.max(0, state.current)];
   showPlace(st, st?.scene ?? 'fleuve');
+};
+let soundOn = true;
+$('#vSound').onclick = () => {
+  soundOn = !soundOn;
+  river?.audio.setMaster(soundOn ? 0.8 : 0);
+  if (soundOn) river?.audio.resume();
+  $('#vSound').classList.toggle('off', !soundOn);
+  $('#vSound').setAttribute('aria-pressed', soundOn);
+  $('#vSound').setAttribute('aria-label', soundOn ? 'Couper le son' : 'Remettre le son');
 };
 $('#vExpand').onclick = () => {
   const full = viewer.classList.toggle('full');
@@ -296,6 +308,7 @@ const pilotUI = new PilotUI({
   onStart: () => pause(),
   onExit: () => { tour.setProgress(state.s); $('#vMode').textContent = 'À bord'; },
 });
+if (import.meta.env.DEV) window.__ui = pilotUI;
 
 tour.on('route', selectRoute);
 tour.on('stop', (i) => gotoStop(i, true));

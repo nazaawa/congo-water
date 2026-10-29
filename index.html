@@ -52,6 +52,11 @@
             <button type="button" role="radio" data-mode="course" aria-checked="false">Course</button>
             <button type="button" role="radio" data-mode="visite" aria-checked="false">Visite guidée</button>
           </div>
+          <div class="pconds">
+            <label>Météo <select id="pWeather"><option value="variable">Variable</option><option value="beau">Beau temps</option><option value="orage">Orage</option></select></label>
+            <label>Saison <select id="pSeason"><option value="">Normale</option><option value="pluies">Pluies · hautes eaux</option><option value="seche">Sèche · bancs de sable</option></select></label>
+            <label>Moment <select id="pTime"><option value="">Comme la carte</option><option value="8">Matin</option><option value="13">Midi</option><option value="17.6">Coucher</option><option value="19.4">Nuit</option></select></label>
+          </div>
           <div class="pick">
             <label>Départ <select id="pFrom"></select></label>
             <span aria-hidden="true">→</span>
@@ -74,7 +79,10 @@
       <footer class="credits">
         Carte © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>,
         <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · Imagerie Esri ·
-        Rendu de l'eau inspiré d'<a href="https://github.com/Humpalumps/Ultra-Water" target="_blank" rel="noopener">Ultra-Water</a>
+        Rendu de l'eau inspiré d'<a href="https://github.com/Humpalumps/Ultra-Water" target="_blank" rel="noopener">Ultra-Water</a> ·
+        Personnages d'après <a href="https://github.com/mrdoob/slop-newyork" target="_blank" rel="noopener">slop-newyork</a> ·
+        Animaux : Hippopotamus, Crocodile, Great egret, Heron, Yellow billed stork par Poly by Google
+        (<a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC-BY 3.0</a>, via <a href="https://poly.pizza" target="_blank" rel="noopener">Poly Pizza</a>), Fish par Quaternius (CC0)
       </footer>
     </aside>
 
@@ -89,6 +97,7 @@
       <div class="vbar">
         <div class="vtitle"><b id="vPlace">Fleuve Congo</b><span id="vScene"></span></div>
         <div class="vbtns">
+          <button type="button" id="vSound" title="Son" aria-label="Couper le son" aria-pressed="true">♪</button>
           <button type="button" id="vMode" title="Changer de point de vue">À bord</button>
           <button type="button" id="vExpand" title="Plein écran" aria-label="Plein écran">⤢</button>
           <button type="button" id="vClose" title="Fermer" aria-label="Fermer la vue 3D">✕</button>
@@ -99,6 +108,12 @@
       <div id="pilotHud" hidden>
         <ol class="rank" id="hRank" hidden></ol>
         <div class="countdown" id="countdown" hidden></div>
+        <div class="rhythm" id="rhythm" hidden aria-live="polite">
+          <div class="ring"><i id="rRing"></i><b id="rCombo"></b></div>
+          <div class="chant"><span id="rCall"></span><em id="rJudge"></em></div>
+        </div>
+        <button type="button" class="paddle-btn" id="hPaddle" hidden aria-label="Coup de pagaie">Pagaie</button>
+        <div class="drum" id="drum" hidden><span class="drum-ico" aria-hidden="true"></span><div><small>Lokolé</small><b id="drumText"></b></div></div>
         <aside class="card" id="card" hidden><small id="cKind"></small><b id="cName"></b><p id="cText"></p></aside>
         <div class="hud-top">
           <b id="hTitle"></b>
@@ -142,7 +157,7 @@
       <div class="vctl">
         <label>Ambiance <select id="preset" aria-label="Ambiance"></select></label>
         <label>Bateau <select id="pirogue" aria-label="Bateau"><option value="">—</option></select></label>
-        <label>Heure <input type="range" id="hour" min="5.6" max="18.6" step="0.05" value="16" /><output id="hourOut">16:00</output></label>
+        <label>Heure <input type="range" id="hour" min="4.8" max="19.8" step="0.05" value="16" /><output id="hourOut">16:00</output></label>
         <label>Courant <input type="range" id="flow" min="0.2" max="2" step="0.05" value="1" /><output id="flowOut">×1</output></label>
         <p class="vnote" id="vNote"></p>
       </div>

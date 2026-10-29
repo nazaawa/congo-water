@@ -264,7 +264,8 @@ export class Pirogue {
     this.group.rotateZ(st.pitch);
     this.group.rotateX(st.roll);
     // paddle stroke: long pull, quick recovery
-    this.stroke = (this.stroke ?? 0) + dt * (0.25 + 0.75 * effort);
+    // the paddlers keep to the chant when there is one (strokeClock: strokes counted by the audio)
+    this.stroke = this.strokeClock?.() ?? (this.stroke ?? 0) + dt * (0.25 + 0.75 * effort);
     if (this.motor) this.motor.rotation.y = -(this.steer ?? 0) * 0.5;
     const stroke = { stroke: 0, steer: this.steer ?? 0 };
     for (const p of this.people) {

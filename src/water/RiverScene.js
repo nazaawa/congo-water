@@ -9,6 +9,9 @@ import { PlanarReflection } from './PlanarReflection.js';
 import { buildWorld } from './world.js';
 import { straightChannel } from './channel.js';
 import { Villagers } from './villagers.js';
+import { Fauna, loadFauna } from './fauna.js';
+import { Weather, SEASONS } from './weather.js';
+import { RiverAudio } from './audio.js';
 import { Pirogue, Hyacinths, MooredPirogues, riverBoats, loadPirogues } from './floaters.js';
 import { mulberry32 } from './noise.js';
 import { Pilot } from './pilot.js';
@@ -55,13 +58,20 @@ export class RiverScene {
     this.scene.add(this.sun, this.sun.target, this.hemi);
 
     // the pirogue GLBs load once; setPlace waits for them
-    this.ready = loadPirogues(import.meta.env.BASE_URL).then((models) => {
+    this.ready = Promise.all([loadPirogues(import.meta.env.BASE_URL), loadFaunaModels()]).then(([models, fauna]) => {
       this.models = models;
+      this.faunaModels = fauna;
       this.pirogue = new Pirogue(models);
       this.scene.add(this.pirogue.group);
     });
 
     this.pilot = new Pilot(this);
+    this.weather = new Weather(this);
+    // sound: ambience of the place, thunder, the chant and the lokolé (driven by the piloting UI)
+    this.audio = new RiverAudio();
+    this.weather.onThunder = (d) => this.audio.thunder(d);
+    this.ambTimer = 0;
+    this.season = null;
     this.time = 0;
     this.timer = new THREE.Timer();
     this.active = false;
@@ -101,6 +111,7 @@ export class RiverScene {
       this.hyacinths.mesh.geometry.dispose();
       this.scene.remove(this.villagers.group);
       this.villagers.dispose();
+      this.fauna.dispose();
       this.onTeardown?.();
     }
     const channel = this.channel = opts.channel ?? straightChannel(p);
@@ -119,9 +130,11 @@ export class RiverScene {
     this.station = { s: stationS, d: stationD };
     this.fallS = fallS;
 
-    const flowed = { ...p, flow: p.flow * this.flowScale };
+    this.season = opts.season !== undefined ? opts.season : this.season;
+    const season = SEASONS[this.season];
+    const flowed = this.conditions();
     this.waves = buildWaves(flowed, channel);
-    this.world = buildWorld(p, this.water.uniforms, channel, { stationS, fallS });
+    this.world = buildWorld(p, this.water.uniforms, channel, { stationS, fallS, level: season?.level ?? 0 });
     this.scene.add(this.world.group);
     const fall = fallS != null ? { s: fallS } : null;
     this.water.configure(flowed, this.waves, this.world.rocks, fall);
@@ -143,7 +156,7 @@ export class RiverScene {
     this.pirogue.place(st.x, st.z, Math.atan2(-st.fz, -st.fx));
     this.boatAt = new THREE.Vector3(st.x, 0, st.z);
 
-    this.hyacinths = new Hyacinths(p.hyacinths, p, channel, this.boatAt);
+    this.hyacinths = new Hyacinths(Math.round(p.hyacinths * (season?.hyacinths ?? 1)), p, channel, this.boatAt);
     this.scene.add(this.hyacinths.mesh);
     this.boats = riverBoats(p, mulberry32(21), this.models, channel, stationS);
     this.scene.add(this.boats.group);
@@ -152,6 +165,10 @@ export class RiverScene {
     this.rockTimer = 0;
     this.villagers = new Villagers(this.world.villages, channel);
     this.scene.add(this.villagers.group);
+    this.fauna = new Fauna(this.faunaModels, p, channel, this.world.height, mulberry32(41));
+    this.scene.add(this.fauna.group);
+    this.weather.place(this.world, this.moored);
+    this.ambTimer = 0;
     this.onPlace?.(this.world);
 
     this.scene.fog = new THREE.FogExp2(0xffffff, p.haze);
@@ -167,13 +184,24 @@ export class RiverScene {
 
   setSun(elev, azim = this.preset.sun.azim) {
     this.sunElev = elev;
-    const dir = this.sky.set(elev, azim, this.preset.cloud);
+    this.sunAzim = azim;
+    const st = this.weather.storm, cloud = this.preset.cloud + (0.98 - this.preset.cloud) * st;
+    const dir = this.sky.set(elev, azim, cloud);
+    const dim = 1 - this.weather.darkness;
+    if (st > 0.01) {
+      // the storm: a lid of grey cloud, the light and the sky colours muted
+      for (const u of [this.sky.uniforms.uZenith.value, this.sky.uniforms.uHorizon.value]) u.lerp(new THREE.Vector3(0.22, 0.24, 0.26).multiplyScalar(Math.max(0.05, Math.min(1, elev / 20 + 0.3))), st * 0.8);
+      this.sky.horizon.setRGB(...this.sky.uniforms.uHorizon.value.toArray());
+      this.sky.uniforms.uSunColor.value.multiplyScalar(dim * dim);   // no sun glitter under the storm
+    }
     const sc = this.sky.sunColor, hz = this.sky.horizon;
     this.sun.color.copy(sc).multiplyScalar(1 / Math.max(sc.r, 1e-3));
-    this.sun.intensity = 2.6 * Math.max(sc.r, 0.02) * THREE.MathUtils.smoothstep(elev, -3, 6);
+    this.sun.intensity = 2.6 * Math.max(sc.r, 0.02) * THREE.MathUtils.smoothstep(elev, -3, 6) * dim * dim;
     const zen = this.sky.uniforms.uZenith.value;
     this.hemi.color.setRGB(zen.x * 1.6, zen.y * 1.6, zen.z * 1.6).lerp(hz, 0.5);
-    this.hemi.intensity = 0.5 + 1.1 * THREE.MathUtils.smoothstep(elev, -6, 30);
+    this.hemi.intensity = (0.06 + 0.44 * THREE.MathUtils.smoothstep(elev, -9, 0) + 1.1 * THREE.MathUtils.smoothstep(elev, -6, 30)) * dim;
+    this.hemiBase = this.hemi.intensity;
+    if (this.scene.fog) this.scene.fog.density = this.preset.haze * this.weather.haze;
     this.sunDir = dir.clone();
     this.scene.fog?.color.copy(hz);
     for (const u of this.world?.lit ?? []) u.value.copy(hz).lerp(sc, 0.5).multiplyScalar(0.9);
@@ -185,11 +213,25 @@ export class RiverScene {
     this.scene.remove(this.moored.group);
     this.moored = new MooredPirogues(this.models, this.preset, this.channel, this.station, mulberry32(31), kind, this.world.villages);
     this.scene.add(this.moored.group);
+    this.weather.place(this.world, this.moored);
   }
+
+  // the preset as the river is now: current scaled (slider, season), chop raised by the wind
+  conditions() {
+    const p = this.preset, k = this.weather.chop, f = this.flowScale * (SEASONS[this.season]?.flow ?? 1);
+    this.chopNow = k;
+    return { ...p, flow: p.flow * f, chop: p.chop * Math.min(k, 2.2), waves: p.waves.map((w) => ({ ...w, amp: w.amp * k })), foam: p.foam + (k - 1) * 0.05 };
+  }
+
+  setStorm(v) { this.weather.setStorm(v); }
 
   setFlowScale(s) {
     this.flowScale = s;
-    const p = { ...this.preset, flow: this.preset.flow * s };
+    this.refreshWater();
+  }
+
+  refreshWater() {
+    const p = this.conditions();
     this.waves = buildWaves(p, this.channel);
     this.water.configure(p, this.waves, this.world.rocks, this.fallS != null ? { s: this.fallS } : null);
     this.hyacinths.flow = p.flow * 0.92;
@@ -254,6 +296,22 @@ export class RiverScene {
     }
     this.world.birds.value.lerp(bp, 1 - Math.exp(-dt * 0.3));
     this.villagers.update(bp, t, dt);
+    this.fauna.update(this.waves, t, dt, bp);
+    if (this.weather.update(dt, t, this.camera)) {
+      if (Math.abs(this.weather.chop - this.chopNow) > 0.06) this.refreshWater();
+      if (Math.abs(this.weather.storm - (this.stormLit ?? 0)) > 0.01) { this.stormLit = this.weather.storm; this.setSun(this.sunElev, this.sunAzim); }
+    }
+    if ((this.ambTimer -= dt) <= 0) {
+      this.ambTimer = 0.5;
+      const p = this.preset, w = this.weather, night = w.night ?? 0;
+      this.audio.setAmbience({
+        water: 0.55 + 0.3 * Math.min(1, p.flow / 4), forest: p.bank === 'ville' ? 0.15 : (p.bank === 'falaise' ? 0.5 : 0.8) * (1 - night * 0.7),
+        city: p.bank === 'ville' ? 0.8 * (1 - night * 0.5) : 0, night: p.bank === 'ville' ? night * 0.3 : night,
+        rain: THREE.MathUtils.smoothstep(w.storm, 0.3, 0.9), wind: w.storm * (0.4 + 0.6 * w.gust),
+      });
+    }
+    // lightning lights up everything for a blink
+    this.hemi.intensity = (this.hemiBase ?? this.hemi.intensity) + this.weather.flash * 3.5;
     this.onFrame?.(t, dt);
     // wake under the pirogue (only when it actually moves through the water)
     const wake = this.water.uniforms.uWake.value;
@@ -283,7 +341,7 @@ export class RiverScene {
       const h = this.chaseH;
       this.camera.position.set(g.position.x - Math.cos(h) * (L + 14), 4.5 + L * 0.3, g.position.z - Math.sin(h) * (L + 14));
       this.camera.lookAt(g.position.x + Math.cos(h) * 12, 1.2, g.position.z + Math.sin(h) * 12);
-    } else {
+    } else if (this.mode !== 'free') {      // 'free': the camera is left alone (scripted views)
       // keep orbiting the boat as it sways
       const d = new THREE.Vector3(g.position.x, 1 + g.position.y, g.position.z).sub(this.controls.target);
       this.controls.target.add(d);
@@ -309,4 +367,12 @@ export class RiverScene {
     this.water.uniforms.uUseRefl.value = ok ? 1 : 0;
     this.renderer.render(this.scene, this.camera);
   }
+}
+
+async function loadFaunaModels() {
+  const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
+    import('three/addons/loaders/GLTFLoader.js'),
+    import('three/addons/libs/meshopt_decoder.module.js'),
+  ]);
+  return loadFauna(import.meta.env.BASE_URL, new GLTFLoader().setMeshoptDecoder(MeshoptDecoder));
 }

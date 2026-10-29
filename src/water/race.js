@@ -127,7 +127,7 @@ export class Race {
       boat.group.add(pole, flag);
       this.group.add(boat.group);
       const lane = (i % 2 ? 1 : -1) * Math.ceil((i + 1) / 2);
-      this.rivals.push({ boat, team, skill: 0.86 + rnd() * 0.12, lane, u: 0, laneD: lane * Math.max(6, boat.halfBeam * 6), wobble: rnd() * 10, finished: null, heading: m.heading });
+      this.rivals.push({ boat, team, skill: 0.9 + rnd() * 0.12, lane, u: 0, laneD: lane * Math.max(6, boat.halfBeam * 6), wobble: rnd() * 10, finished: null, heading: m.heading });
     }
     river.scene.add(this.group);
     this.started = false;
@@ -146,7 +146,7 @@ export class Race {
         const q = at(r.u, r.laneD);
         const cur = pilot.current(q.x, q.z), along = this.m.alongSign;
         // speed made good along the line: own speed through the water, plus or minus the current
-        const own = this.m.vmax * r.skill * (0.93 + 0.07 * Math.sin(time * 0.05 + r.wobble));
+        const own = this.m.vmax * r.skill * (0.97 + 0.04 * Math.sin(time * 0.05 + r.wobble));
         const v = Math.max(0.4, own + (this.m.crossing ? 0 : along * cur));
         r.u = Math.min(1, r.u + (v * dt) / this.m.lengthAlong);
         if (r.u >= 1) r.finished = time;
@@ -220,10 +220,20 @@ export function autopilot(m, river, line, slowAt = []) {
     const slow = slowAt.some((st) => Math.abs(st - c.s) < Math.max(80, W)) || near;
     // aground: back off; a rock or the bank dead ahead: turn to the clear side
     if (pilot.grounded > 0) return { steer: -Math.sign(e || 1), throttle: -0.4 };
-    const L = river.pirogue.L, probe = (a) => pilot.blocked(s.x + Math.cos(s.heading + a) * (L * 0.5 + 8), s.z + Math.sin(s.heading + a) * (L * 0.5 + 8));
-    if (probe(0)) {
-      const left = probe(-0.6), right = probe(0.6);
-      if (left !== right) e = left ? 1 : -1;
+    // how far the water is clear along a bearing (rocks, banks), up to `far`
+    const L = river.pirogue.L, far = L * 0.5 + Math.max(18, L * 3);
+    const clear = (a) => {
+      for (let r = L * 0.5 + 2; r <= far; r += 2.5) if (pilot.blocked(s.x + Math.cos(a) * r, s.z + Math.sin(a) * r)) return r;
+      return far;
+    };
+    const want = s.heading + e;
+    if (clear(want) < far) {
+      // threading rocks: the bearing with the most clear water, the nearest to the one wanted
+      let best = -Infinity;
+      for (let k = -6; k <= 6; k++) {
+        const a = want + k * 0.2, score = clear(a) - Math.abs(k) * 0.9;
+        if (score > best) { best = score; e = Math.atan2(Math.sin(a - s.heading), Math.cos(a - s.heading)); }
+      }
     }
     return { steer: THREE.MathUtils.clamp(e * 2.5 - s.r * 1.5, -1, 1), throttle: slow ? 0.4 : 0.8 };
   };

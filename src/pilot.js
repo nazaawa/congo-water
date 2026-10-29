@@ -160,7 +160,8 @@ export function planMission(tour, route, i, j) {
     ...base, ok, crossing: false, start, end, dist: L, scale: t.scale, squeeze: 1 / t.k, downstream, north: true, channel,
     stationS: s0, stationD: dS, fallS: fallS != null && fallS > 40 ? fallS : null, stops, labels: all,
     lengthAlong: Math.abs(s1 - s0), alongSign: downstream ? 1 : -1,
-    heading: E ? Math.atan2(end.z - start.z, end.x - start.x) : Math.atan2(-start.fz, -start.fx),
+    // bow along the bed, towards the landing (upstream when piloting freely)
+    heading: E && downstream ? Math.atan2(start.fz, start.fx) : Math.atan2(-start.fz, -start.fx),
     reason: ok ? '' : L <= 40 ? 'Ces deux étapes sont au même endroit du parcours.' : `Trajet trop long pour le pilotage (${fmtKm(L)} sur le fleuve) — choisis deux étapes plus proches.`,
     // the 3D world is the real map scaled: x east, z south
     plan: (P) => [P.x - start.x, -(P.z - start.z)],
@@ -214,10 +215,11 @@ export class PilotUI {
     addEventListener('keydown', (e) => {
       if (!this.active || e.target.matches?.('input, select, textarea')) return;
       if (KEYS[e.code]) { this.held.add(KEYS[e.code]); e.preventDefault(); }
-      else if (e.code === 'Space') { this.river.pilot.input.throttle = 0; e.preventDefault(); }
+      else if (e.code === 'Space') { e.preventDefault(); if (this.chant) { if (!e.repeat) this.paddleStroke(); } else this.river.pilot.input.throttle = 0; }
       else if (e.code === 'KeyC') this.cycleCamera();
       else if (e.code === 'KeyP' && this.auto) { this.autoOn = !this.autoOn; this.flash(this.autoOn ? 'Pilote automatique repris' : 'Tu as la barre'); }
     });
+    $('#hPaddle').addEventListener('pointerdown', (e) => { e.preventDefault(); this.paddleStroke(); });
     addEventListener('keyup', (e) => { if (KEYS[e.code]) this.held.delete(KEYS[e.code]); });
     addEventListener('blur', () => this.held.clear());
   }
@@ -272,8 +274,11 @@ export class PilotUI {
     this.onStart?.();
     this.mission = m;
     this.cleanup();
-    await this.showPlace(m.from, m.sceneKey, { channel: m.channel, stationS: m.stationS, stationD: m.stationD, fallS: m.fallS, kind: m.kind });
+    const season = $('#pSeason').value || null;
+    await this.showPlace(m.from, m.sceneKey, { channel: m.channel, stationS: m.stationS, stationD: m.stationD, fallS: m.fallS, kind: m.kind, season });
     const r = this.river = await this.ensureRiver();
+    if ($('#pTime').value) { const h = $('#hour'); h.value = $('#pTime').value; h.dispatchEvent(new Event('input')); }
+    this.startSound(r, m, mode);
     this.viewer.classList.remove('pip');
     this.viewer.classList.add('full', 'piloting');
     $('#vExpand').textContent = '⤡';
@@ -311,6 +316,16 @@ export class PilotUI {
       }
     }
     this.buildLabels();
+    this.announced = new Set();
+    this.drumQueue = [];
+    // the weather of the trip: fine, a storm from the start, or one rolling in on the way
+    const wx = $('#pWeather').value;
+    r.weather.target = r.weather.storm = wx === 'orage' ? 1 : 0;
+    r.refreshWater();
+    r.setSun(r.sunElev, r.sunAzim);
+    this.stormPlan = wx === 'variable' && Math.random() < 0.75 ? { at: m.end ? 0.2 + Math.random() * 0.3 : 60 + Math.random() * 60, warned: false, on: false, off: false } : null;
+    if (mode === 'course') this.drum('HH.HH.H-L', 'Les tambours appellent les équipages. Tokende ! (On y va !)');
+    else this.drum('HL.HL-HH', m.end ? `${m.from.name} salue ton départ. Mbote !` : 'Le fleuve est à toi. Mbote !');
     document.activeElement?.blur?.();
     cancelAnimationFrame(this.raf);
     let last = performance.now();
@@ -336,6 +351,125 @@ export class PilotUI {
     $('#card').hidden = true;
     $('#labels').innerHTML = '';
     this.labels = [];
+    this.bubbles = null;
+    $('#rhythm').hidden = true;
+    $('#hPaddle').hidden = true;
+    $('#drum').hidden = true;
+    if (this.river) {
+      const a = this.river.audio;
+      a.stopChant();
+      a.engine(false);
+      this.river.pirogue.strokeClock = null;
+      this.river.pilot.input.boost = 1;
+      this.river.weather.setStorm(0);
+    }
+    this.chant = null;
+  }
+
+  // the chant of the paddlers (paddle boats) or the outboard (motor boats)
+  startSound(r, m, mode) {
+    const a = r.audio, spec = PIROGUES[r.pirogue.kind];
+    a.resume();
+    this.rhythm = 0;
+    this.combo = 0;
+    if (!spec.motor) {
+      a.startChant({ bpm: 36, seed: Math.floor(Math.random() * 1000) });
+      a.setChantLevel(mode === 'course' ? 0.9 : 0.6);
+      r.pirogue.strokeClock = () => { if (!a.ready || !a.beats.length) return null; const b = a.beat(); return b.index + b.phase; };
+      this.chant = { bpm: 36, lastCatch: -1 };
+      a.onBeat = (i) => this.onBeat(i);
+      $('#rhythm').hidden = false;
+      $('#hPaddle').hidden = false;
+    } else a.engine(true, 0);
+    $('#kAuto').hidden = !this.auto;
+    document.querySelector('.hud-bottom .keys').firstChild.textContent = spec.motor
+      ? 'Z/W ▲ accélérer · S ▼ ralentir · Q/A ◀ ▶ D barrer · Espace stop · C caméra'
+      : 'Z/W ▲ cadence · S ▼ ralentir · Q/A ◀ ▶ D barrer · Espace : pagaie au rythme du chant · C caméra';
+  }
+
+  // the chant's call and response, and whether the last catch was paddled
+  onBeat(i) {
+    const c = this.chant;
+    if (!c) return;
+    const lines = [['Soliste', 'É-é ya !'], ['Soliste', 'Tokende !'], ['Chœur', 'O-hé !'], ['Chœur', 'Makasi !']];
+    const [who, word] = lines[i % 4];
+    $('#rCall').innerHTML = `<small>${who}</small>${word}`;
+    const ring = $('#rRing');
+    ring.style.animation = 'none'; void ring.offsetWidth;
+    ring.style.animation = `beat ${(60 / c.bpm).toFixed(2)}s linear`;
+  }
+
+  paddleStroke() {
+    if (!this.chant || !this.river) return;
+    const a = this.river.audio, j = a.judge();
+    a.stroke(j.quality);
+    const at = a.now - a.latency - j.offset;        // the catch this stroke was aimed at
+    if (Math.abs(at - this.chant.lastCatch) < 0.05) return;     // one stroke per catch
+    this.chant.lastCatch = at;
+    const gain = { perfect: 0.22, good: 0.1, miss: -0.25 }[j.quality];
+    this.rhythm = clamp(this.rhythm + gain, 0, 1);
+    this.combo = j.quality === 'miss' ? 0 : this.combo + 1;
+    const el = $('#rJudge');
+    el.textContent = { perfect: 'Malamu !', good: 'Bien', miss: 'Raté' }[j.quality];
+    el.className = j.quality;
+    $('#rCombo').textContent = this.combo > 1 ? `×${this.combo}` : '';
+    this.river.pilot.input.throttle = Math.max(this.river.pilot.input.throttle, 0.35);
+  }
+
+  soundTick(dt, st, now) {
+    const r = this.river, a = r.audio, m = this.mission, inp = r.pilot.input;
+    if (this.chant) {
+      // the throttle sets the cadence; paddling in time pushes harder
+      const bpm = Math.round(32 + 30 * Math.max(0, inp.throttle));
+      if (Math.abs(bpm - this.chant.bpm) >= 3) { this.chant.bpm = bpm; a.setTempo(bpm); }
+      // two catches gone by without a stroke: the crew loses heart
+      const idle = a.now - this.chant.lastCatch > 2.2 * (60 / this.chant.bpm);
+      this.rhythm = Math.max(0, this.rhythm - dt * (idle ? 0.12 : 0.02));
+      if (idle && this.combo) { this.combo = 0; $('#rCombo').textContent = ''; }
+      inp.boost = 1 + 0.35 * this.rhythm;
+      $('#rhythm').style.setProperty('--fire', this.rhythm.toFixed(2));
+    } else if ((this.engineT = (this.engineT ?? 0) - dt) <= 0) {
+      this.engineT = 0.1;
+      a.engine(true, Math.abs(inp.throttle));
+    }
+    // the villages drum as you come by
+    for (const v of r.world.villages) {
+      if (this.announced.has(v)) continue;
+      const dx = v.centre.x - st.x, dz = v.centre.z - st.z, d = Math.hypot(dx, dz);
+      if (d > 320) continue;
+      this.announced.add(v);
+      const rel = Math.atan2(dz, dx) - st.heading, pan = clamp(Math.sin(rel), -0.9, 0.9);
+      const next = m.stops?.find((S) => m.alongSign * (S.s - m.channel.sample(st.x, st.z).s) > 200);
+      const msgs = [
+        ['HL.HL-HHL', 'Pirogue en vue ! Mbote, Boyei malamu !'],
+        ['HH.LL-HL.HL', 'Les pêcheurs sont rentrés : il y a du poisson frais au village.'],
+        ['LH.LH-HH', next ? `${next.name} est à ${fmtKm(Math.abs(next.s - m.channel.sample(st.x, st.z).s) * m.scale)} en suivant le fleuve.` : 'Bon voyage sur le fleuve !'],
+      ];
+      const [pat, txt] = msgs[this.announced.size % msgs.length];
+      this.drum(pat, `Le village sur la rive ${pan > 0 ? 'droite' : 'gauche'} : « ${txt} »`, pan);
+      break;
+    }
+    // the storm of the trip
+    const sp = this.stormPlan;
+    if (sp) {
+      const x = m.end ? m.progress(st) : st.time;
+      const warnAt = m.end ? sp.at - 0.06 : sp.at - 25;
+      if (!sp.warned && x >= warnAt) { sp.warned = true; this.drum('HHHH.LLLL-HHHH', 'Orage en approche ! Attachez les bâches, serrez la berge.'); }
+      if (!sp.on && x >= sp.at) { sp.on = true; r.weather.setStorm(1); }
+      if (sp.on && !sp.off && x >= (m.end ? sp.at + 0.3 : sp.at + 150)) { sp.off = true; r.weather.setStorm(0); this.drum('HL.HL', 'L’orage est passé. Le fleuve se calme.'); }
+    }
+  }
+
+  // a message on the lokolé, the slit drum of the riverside villages
+  drum(pattern, text, pan = 0) {
+    const a = this.river?.audio;
+    const dur = a ? a.lokole(pattern, { pan, gain: 0.9 }) : 1;
+    $('#drumText').textContent = text;
+    const el = $('#drum');
+    el.hidden = false;
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    clearTimeout(this.drumTimer);
+    this.drumTimer = setTimeout(() => (el.hidden = true), Math.max(5000, dur * 1000 + 3500));
   }
 
   // names floating over the 3D view: the stops on their bank, the rival crews
@@ -362,7 +496,7 @@ export class PilotUI {
   updateLabels(st) {
     const r = this.river, cam = r.camera, w = this.viewer.clientWidth, h = this.viewer.clientHeight;
     const v = this.v3 ??= new (r.camera.position.constructor)();
-    const m = this.mission, c = m.channel.sample(st.x, st.z);
+    const m = this.mission, c = m.channel.sample(st.x, st.z), here = m.geo(st);
     for (const L of this.labels) {
       if (L.rival) { const p = L.rival.pos; if (!p) continue; v.set(p.x, 3.6, p.z); } else v.set(L.pos.x, L.pos.y, L.pos.z);
       const dist = v.distanceTo(cam.position);
@@ -372,8 +506,20 @@ export class PilotUI {
       if (!show) continue;
       L.el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -100%)`;
       L.el.style.opacity = String(clamp(1.4 - dist / (L.rival ? 900 : 6000), 0.35, 1));
-      if (L.stop) L.el.querySelector('em').textContent = fmtKm(Math.abs(L.stop.s - c.s) * m.scale);
+      if (L.stop) L.el.querySelector('em').textContent = fmtKm(m.crossing ? haversine(here, L.stop.coord) : Math.abs(L.stop.s - c.s) * m.scale);
     }
+    // the villagers waving at you call out
+    const box = $('#labels');
+    this.bubbles ??= ['Mbote !', 'Mbote na yo !', 'Boyei malamu !', 'Tokende !'].map((t) => { const el = document.createElement('div'); el.className = 'lbl bubble'; el.textContent = t; box.append(el); return el; });
+    const waving = r.villagers.slots.filter((s) => s.person?.pose === 'wave');
+    this.bubbles.forEach((el, k) => {
+      const s = waving[k];
+      if (!s) { el.style.display = 'none'; return; }
+      v.set(s.x, s.y + 2.1, s.z).project(cam);
+      if (v.z > 1) { el.style.display = 'none'; return; }
+      el.style.display = '';
+      el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -100%)`;
+    });
   }
 
   showCard(stop, kind) {
@@ -438,6 +584,7 @@ export class PilotUI {
 
     const st = pilot.status();
     const geo = m.geo(st), remaining = m.remaining(st);
+    this.soundTick(dt, st, now);
     if (this.race) {
       this.race.update(dt, this.river.time);
       const rows = this.race.standings({ u: m.progress(st), finished: st.arrived ? st.time + this.race.penalty : null });

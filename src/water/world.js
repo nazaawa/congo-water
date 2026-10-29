@@ -10,7 +10,9 @@ import { fbm2, mulberry32, noise2 } from './noise.js';
 const smooth = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
 
 // h(x, z); h.last.inner is how much the last point lies on the inside of a bend (0..1)
-export function makeHeight(p, channel, fallS = null) {
+// level: the season, raising the ground against the water (> 0 dry season: sandbanks come out,
+// < 0 high water: the bank forest stands in the flood)
+export function makeHeight(p, channel, fallS = null, level = 0) {
   const W = p.halfWidth, rise = p.bankRise, H = p.bankHeight;
   const rough = p.bank === 'falaise' ? 0.6 : p.bank === 'ville' ? 0.15 : 0.3;
   const c = {}, last = { inner: 0, d: 0 };
@@ -37,6 +39,9 @@ export function makeHeight(p, channel, fallS = null) {
       if (q > 0) h = Math.max(h, -0.5 + Math.sqrt(q) * 4.5 + fbm2(x * 0.01, z * 0.01) * 2);
     }
     if (fallS != null) h += (1 - smooth(fallS - 4, fallS + 4, c.s)) * p.fall.height;   // the cliff: high ground upstream
+    // dry season: the shallows near the banks and the bars inside the bends come out first
+    if (level > 0) h += level * (d < 0 ? 0.6 + 0.8 * inner + 0.4 * Math.max(0, 1 + d / Math.max(30, W * 0.2)) : 1);
+    else h += level;
     return h;
   };
   fn.last = last;
@@ -584,9 +589,9 @@ function mist(count, origin, spread, uniforms) {
 }
 
 // opts: { stationS (where the boat waits), fallS (the lip of a waterfall, along the bed) }
-export function buildWorld(p, uniforms, channel, { stationS = channel.length / 2, fallS = null } = {}) {
+export function buildWorld(p, uniforms, channel, { stationS = channel.length / 2, fallS = null, level = 0 } = {}) {
   const rnd = mulberry32(42);
-  const height = makeHeight(p, channel, fallS);
+  const height = makeHeight(p, channel, fallS, level);
   const group = new THREE.Group();
   group.add(terrain(p, height, channel));
   group.add(forest(p, height, channel, rnd));
