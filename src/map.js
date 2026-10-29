@@ -10,6 +10,9 @@ setWorkerUrl(workerUrl);
 
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const SAT = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+// when the basemap host can't be reached (offline, or a sandbox that blocks it): bare ground under
+// the rivers and routes, which are the game's own data
+const OFFLINE = { version: 8, sources: {}, layers: [{ id: 'ground', type: 'background', paint: { 'background-color': '#1b150e' } }] };
 
 const PIROGUE_SVG = `<svg viewBox="0 0 24 64" width="18" height="48" aria-hidden="true">
   <path d="M12 1 C17 12 18 30 17 46 C16.5 54 14.5 60 12 63 C9.5 60 7.5 54 7 46 C6 30 7 12 12 1 Z" fill="#5b3a1e" stroke="#f1e9dc" stroke-width="1.5"/>
@@ -76,6 +79,14 @@ export class TourMap {
     this.map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
     this.ready = new Promise((res) => this.map.on('load', () => this.setup().then(res)));
     this.handlers = {};
+    fetch(STYLE, { signal: AbortSignal.timeout(8000) }).then((r) => { if (!r.ok) throw new Error(r.status); }).catch(() => this.goOffline());
+  }
+
+  goOffline() {
+    if (this.offline || this.map.isStyleLoaded()) return;
+    this.offline = true;
+    this.map.getContainer().classList.add('offline');
+    this.map.setStyle(OFFLINE, { diff: false });
   }
 
   on(name, fn) { this.handlers[name] = fn; }
@@ -99,13 +110,15 @@ export class TourMap {
       }
     }
     const firstSymbol = map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
-    map.addSource('sat', { type: 'raster', tiles: [SAT], tileSize: 256, maxzoom: 19, attribution: 'Imagerie © Esri, Maxar, Earthstar Geographics' });
-    map.addLayer({
-      id: 'sat', type: 'raster', source: 'sat',
-      paint: { 'raster-saturation': -0.12, 'raster-contrast': 0.06, 'raster-brightness-max': 0.86 },
-    }, firstSymbol);
+    if (!this.offline) {
+      map.addSource('sat', { type: 'raster', tiles: [SAT], tileSize: 256, maxzoom: 19, attribution: 'Imagerie © Esri, Maxar, Earthstar Geographics' });
+      map.addLayer({
+        id: 'sat', type: 'raster', source: 'sat',
+        paint: { 'raster-saturation': -0.12, 'raster-contrast': 0.06, 'raster-brightness-max': 0.86 },
+      }, firstSymbol);
+    }
 
-    map.addSource('congo', { type: 'geojson', data: congo });
+    map.addSource('congo', { type: 'geojson', data: congo, attribution: this.offline ? '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© contributeurs OpenStreetMap</a>' : undefined });
     map.addSource('rivers', { type: 'geojson', data: rivers });
     map.addSource('routes', { type: 'geojson', data: routes, lineMetrics: true });
     map.addSource('progress', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -116,8 +129,15 @@ export class TourMap {
       id: 'congo-glow', type: 'line', source: 'congo',
       paint: { 'line-color': '#c08a4a', 'line-opacity': 0.35, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 2, 9, 6, 13, 10], 'line-blur': 4 },
     }, firstSymbol);
+    // no basemap: the river itself, as a bronze ribbon on the dark ground
+    if (this.offline) {
+      map.addLayer({
+        id: 'congo-line', type: 'line', source: 'congo', layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#7a5a34', 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 1.5, 9, 4, 13, 12] },
+      }, 'congo-glow');
+    }
     map.addLayer({
-      id: 'rivers-line', type: 'line', source: 'rivers', minzoom: 9,
+      id: 'rivers-line', type: 'line', source: 'rivers', minzoom: this.offline ? 7 : 9,
       paint: { 'line-color': '#3fa7d6', 'line-opacity': 0.85, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.2, 14, 4] },
     }, firstSymbol);
     map.addLayer({
@@ -146,7 +166,7 @@ export class TourMap {
       id: 'pilot-trail', type: 'line', source: 'pilot-trail', layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': '#f7d618', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 2, 14, 4], 'line-dasharray': [1, 1.5] },
     });
-    map.addLayer({
+    if (!this.offline) map.addLayer({
       id: 'rivers-label', type: 'symbol', source: 'rivers', minzoom: 11,
       layout: { 'symbol-placement': 'line', 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Italic'], 'text-size': 12, 'symbol-spacing': 350 },
       paint: { 'text-color': '#1d6f99', 'text-halo-color': '#ffffff', 'text-halo-width': 1.4 },
@@ -158,7 +178,8 @@ export class TourMap {
         'circle-stroke-color': '#140f0a', 'circle-stroke-width': 2.5,
       },
     });
-    map.addLayer({
+    // the stops' names: a symbol layer on the basemap's glyphs, DOM labels without them (setStops)
+    if (!this.offline) map.addLayer({
       id: 'stops-label', type: 'symbol', source: 'stops',
       layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'], 'text-size': 13, 'text-offset': [0, 1.3], 'text-anchor': 'top', 'text-optional': true },
       paint: { 'text-color': '#1a140e', 'text-halo-color': '#fff8ec', 'text-halo-width': 2 },
@@ -171,7 +192,7 @@ export class TourMap {
       map.on('mouseleave', id, () => (map.getCanvas().style.cursor = ''));
     }
 
-    this.setSatellite(true);
+    if (!this.offline) this.setSatellite(true);
 
     const el = document.createElement('div');
     el.className = 'boat-marker';
@@ -227,6 +248,17 @@ export class TourMap {
       type: 'FeatureCollection',
       features: r.stops.map((s, i) => ({ type: 'Feature', properties: { name: s.name, i, color: r.color, current: i === current }, geometry: { type: 'Point', coordinates: s.coord } })),
     });
+    if (this.offline) {
+      this.stopLabels?.forEach((m) => m.remove());
+      // a loop back to the start would put two names on one spot: the first one stays
+      const shown = r.stops.filter((s, i) => r.stops.findIndex((o) => o.coord[0] === s.coord[0] && o.coord[1] === s.coord[1]) === i);
+      this.stopLabels = shown.map((s) => {
+        const i = r.stops.indexOf(s), el = document.createElement('div');
+        el.className = `stop-label${i === current ? ' on' : ''}`;
+        el.textContent = s.name;
+        return new Marker({ element: el, anchor: 'top', offset: [0, 10] }).setLngLat(s.coord).addTo(this.map);
+      });
+    }
   }
 
   // put the boat at distance s (metres) along the route; returns its position

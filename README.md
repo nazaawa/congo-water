@@ -20,7 +20,7 @@ Pour remplacer un modèle, recompresse-le en gardant la hiérarchie. Les noms de
 npx @gltf-transform/cli optimize source.glb public/models/pirogue-peche.glb --compress meshopt --flatten false --join-named false --palette false
 ```
 
-Paramètres d'URL : `?parcours=pool-malebo` saute l'écran titre et ouvre directement cette expédition, et `&3d` ouvre directement la vue 3D.
+Adresse : `#pool-malebo` (ou `?parcours=pool-malebo`) saute l'écran titre et ouvre directement cette expédition, et `?3d` ouvre directement la vue 3D. L'adresse suit l'expédition ouverte.
 
 ## Piloter la pirogue
 
@@ -104,6 +104,7 @@ Les étapes et leurs coordonnées sont dans `src/data/routes.js` (vérifiées av
 
 **Carte** (`src/map.js`)
 - Imagerie satellite Esri par défaut (les noms de routes et les points d'intérêt sont masqués), fond vectoriel OpenFreeMap au choix, libellés en français quand OSM les a.
+- Si le fond de carte est injoignable (hors ligne, ou dans un cadre qui bloque les autres sites), la carte passe sur un sol nu : le fleuve, les rivières et les parcours restent, car ce sont les données du jeu.
 - Une pirogue avance le long du tracé, à la vitesse typique de l'embarcation, en temps accéléré.
 - Quand elle passe une étape, la vue 3D change d'ambiance.
 

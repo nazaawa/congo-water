@@ -245,7 +245,7 @@ function goTitle() {
   titleEl.hidden = false;
   void titleEl.offsetWidth;
   titleEl.classList.remove('out');
-  history.replaceState(null, '', location.pathname);
+  setLink('');
   showHero();
   selMenu(0, true);
 }
@@ -388,7 +388,11 @@ function selectRoute(id) {
   setCurrent(0, !viewer.hidden);
   $('#vOpen').hidden = !viewer.hidden;
   $('#detail').scrollTop = 0;
-  history.replaceState(null, '', `?parcours=${r.id}`);
+  setLink(`#${r.id}`);
+}
+// the address names the open expedition (#pool-malebo), so it can be bookmarked or sent
+function setLink(hash) {
+  try { history.replaceState(null, '', hash || location.pathname); } catch { /* a sandboxed frame may refuse */ }
 }
 
 function closeQuest() {
@@ -527,7 +531,8 @@ tour.on('stop', (i) => gotoStop(i, true));
 // --- start: the title screen, or straight to an expedition (?parcours=…) ------------------------------
 renderList();
 const params = new URLSearchParams(location.search);
-if (params.get('parcours')) {
+const startId = params.get('parcours') ?? ROUTES.find((r) => `#${r.id}` === location.hash)?.id;
+if (startId) {
   setScreen('map');
   titleEl.hidden = true;
   $('#mapUi').hidden = false;
@@ -535,7 +540,7 @@ if (params.get('parcours')) {
 } else showHero();
 tour.ready.then(() => {
   renderList();
-  const id = params.get('parcours');
-  if (id) selectRoute(id);
+  if (tour.offline) $('.layer-toggle').hidden = true;     // neither basemap can be reached
+  if (startId) selectRoute(startId);
   if (params.has('3d')) $('#vOpen').click();
 });
